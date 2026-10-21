@@ -26,10 +26,9 @@ public class BM25Scorer implements Scorer {
             return 0.0;
         }
 
-        // Standard Robertson-Spärck Jones IDF for BM25 with smoothing
         double idf = Math.log(1.0 + ((totalDocs - docFreq + 0.5) / (docFreq + 0.5)));
         if (idf < 0.0001) {
-            idf = 0.0001; // Avoid negative IDF for high frequency terms
+            idf = 0.0001;
         }
 
         double tf = posting.getTermFrequency();

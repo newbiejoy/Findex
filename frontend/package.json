@@ -1,14 +1,19 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "desktop": "electron electron/main.cjs",
+    "package:win": "npm run build && electron-packager . Findex --platform=win32 --arch=x64 --out=dist-win --overwrite --prune=true"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.0.0",
     "typescript": "~6.0.3",
     "vite": "^8.3.4"
   },

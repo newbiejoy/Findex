@@ -5,16 +5,16 @@ import java.util.*;
 
 public class StandardTokenizer implements Tokenizer {
     public static final Set<String> DEFAULT_STOPWORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-        "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are", 
-        "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but", 
-        "by", "could", "did", "do", "does", "doing", "down", "during", "each", "few", "for", "from", 
-        "further", "had", "has", "have", "having", "he", "her", "here", "hers", "herself", "him", 
-        "himself", "his", "how", "i", "if", "in", "into", "is", "it", "its", "itself", "just", 
-        "me", "more", "most", "my", "myself", "no", "nor", "not", "now", "of", "off", "on", "once", 
-        "only", "or", "other", "our", "ours", "ourselves", "out", "over", "own", "same", "she", 
-        "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them", 
-        "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too", 
-        "under", "until", "up", "very", "was", "we", "were", "what", "when", "where", "which", 
+        "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", "any", "are",
+        "as", "at", "be", "because", "been", "before", "being", "below", "between", "both", "but",
+        "by", "could", "did", "do", "does", "doing", "down", "during", "each", "few", "for", "from",
+        "further", "had", "has", "have", "having", "he", "her", "here", "hers", "herself", "him",
+        "himself", "his", "how", "i", "if", "in", "into", "is", "it", "its", "itself", "just",
+        "me", "more", "most", "my", "myself", "no", "nor", "not", "now", "of", "off", "on", "once",
+        "only", "or", "other", "our", "ours", "ourselves", "out", "over", "own", "same", "she",
+        "should", "so", "some", "such", "than", "that", "the", "their", "theirs", "them",
+        "themselves", "then", "there", "these", "they", "this", "those", "through", "to", "too",
+        "under", "until", "up", "very", "was", "we", "were", "what", "when", "where", "which",
         "while", "who", "whom", "why", "with", "would", "you", "your", "yours", "yourself", "yourselves"
     )));
 
@@ -22,7 +22,7 @@ public class StandardTokenizer implements Tokenizer {
     private final Set<String> stopwords;
 
     public StandardTokenizer() {
-        this(false); // default: false to preserve search fidelity (e.g. searching "to be or not to be")
+        this(false);
     }
 
     public StandardTokenizer(boolean removeStopwords) {
@@ -47,7 +47,7 @@ public class StandardTokenizer implements Tokenizer {
         int i = 0;
 
         while (i < length) {
-            // Skip non-alphanumeric characters (allow underscore for identifiers)
+
             while (i < length && !isTokenChar(text.charAt(i))) {
                 i++;
             }
@@ -61,10 +61,9 @@ public class StandardTokenizer implements Tokenizer {
             int endOffset = i;
 
             String raw = text.substring(startOffset, endOffset).toLowerCase(Locale.ROOT);
-            
-            // Filter short noise if desired or stopwords if enabled
+
             if (removeStopwords && stopwords.contains(raw)) {
-                // Keep token position incrementing to preserve exact gap in phrase queries
+
                 tokenPosition++;
                 continue;
             }

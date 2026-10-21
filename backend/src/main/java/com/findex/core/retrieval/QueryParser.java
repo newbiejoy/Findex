@@ -30,7 +30,6 @@ public class QueryParser {
             return new MatchAllNode();
         }
 
-        // Tokenize while preserving phrase quotes
         List<String> rawTokens = extractTokensAndPhrases(rawQuery.trim());
         if (rawTokens.isEmpty()) {
             return new MatchAllNode();
@@ -45,19 +44,18 @@ public class QueryParser {
         int lastIndex = 0;
 
         while (matcher.find()) {
-            // Text before phrase
+
             if (matcher.start() > lastIndex) {
                 String sub = input.substring(lastIndex, matcher.start()).trim();
                 if (!sub.isEmpty()) {
                     tokens.addAll(Arrays.asList(sub.split("\\s+")));
                 }
             }
-            // Quoted phrase as single token: "term1 term2"
+
             tokens.add("\"" + matcher.group(1).trim() + "\"");
             lastIndex = matcher.end();
         }
 
-        // Remaining text
         if (lastIndex < input.length()) {
             String sub = input.substring(lastIndex).trim();
             if (!sub.isEmpty()) {
@@ -158,7 +156,6 @@ public class QueryParser {
             if (normalized.isEmpty()) return new MatchAllNode();
             if (normalized.size() == 1) return new TermNode(normalized.get(0));
 
-            // Chain as AND node if tokenization yielded multiple subwords
             Node chain = new TermNode(normalized.get(0));
             for (int i = 1; i < normalized.size(); i++) {
                 chain = new AndNode(chain, new TermNode(normalized.get(i)));
@@ -171,9 +168,6 @@ public class QueryParser {
         }
     }
 
-    /**
-     * Evaluates AST against the inverted index to produce matching candidate document IDs.
-     */
     public Set<Integer> evaluateCandidates(Node node, InvertedIndex index) {
         return switch (node) {
             case TermNode t -> {

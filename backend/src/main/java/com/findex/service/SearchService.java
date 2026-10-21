@@ -24,7 +24,6 @@ public class SearchService {
     public SearchResponse search(String query, String mode, String fileType, String folderId, int limit) {
         SearchResponse response = searchEngine.search(query, mode, fileType, folderId, limit);
 
-        // Record non-empty searches into database history
         if (query != null && !query.isBlank()) {
             dbManager.recordSearch(query, response.getMode(), response.getTotalResults(), response.getTimeTakenMs());
         }

@@ -57,7 +57,7 @@ public class SearchController {
                 Desktop.getDesktop().open(file);
                 return ResponseEntity.ok(Map.of("status", "opened", "path", file.getAbsolutePath()));
             } else {
-                // Windows fallback using ProcessBuilder
+
                 new ProcessBuilder("cmd.exe", "/c", "start", "", file.getAbsolutePath()).start();
                 return ResponseEntity.ok(Map.of("status", "launched", "path", file.getAbsolutePath()));
             }

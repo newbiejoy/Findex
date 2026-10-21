@@ -13,7 +13,7 @@ public class IndexingProgress implements Serializable {
     private final String errorMessage;
     private final long durationMs;
 
-    public IndexingProgress(Status status, int totalFiles, int indexedFiles, 
+    public IndexingProgress(Status status, int totalFiles, int indexedFiles,
                             String currentFile, double percent, String errorMessage, long durationMs) {
         this.status = status;
         this.totalFiles = totalFiles;

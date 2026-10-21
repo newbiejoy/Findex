@@ -10,7 +10,7 @@ public class InvertedIndex {
     private final Map<Integer, IndexedDocument> documents = new ConcurrentHashMap<>();
     private final Map<String, Integer> pathIdMap = new ConcurrentHashMap<>();
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
-    
+
     private long totalTermLength = 0;
     private long totalPostingsCount = 0;
     private long lastIndexedTime = 0;
@@ -18,7 +18,7 @@ public class InvertedIndex {
     public void addDocument(IndexedDocument doc, List<Token> tokens) {
         rwLock.writeLock().lock();
         try {
-            // If already exists, remove first to update cleanly
+
             if (documents.containsKey(doc.getId())) {
                 removeDocument(doc.getId());
             }
@@ -27,13 +27,11 @@ public class InvertedIndex {
             pathIdMap.put(doc.getFilePath(), doc.getId());
             totalTermLength += tokens.size();
 
-            // Group positions by term
             Map<String, List<Integer>> termPositions = new HashMap<>();
             for (Token token : tokens) {
                 termPositions.computeIfAbsent(token.getText(), k -> new ArrayList<>()).add(token.getPosition());
             }
 
-            // Insert into index
             for (Map.Entry<String, List<Integer>> entry : termPositions.entrySet()) {
                 String term = entry.getKey();
                 List<Integer> positions = entry.getValue();

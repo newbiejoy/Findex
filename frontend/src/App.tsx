@@ -2,19 +2,18 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search,
   FolderOpen,
-  Activity,
+  Zap,
   FileText,
   X,
+  ExternalLink,
+  Copy,
+  Check,
   Plus,
   RefreshCw,
   Trash2,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
-  Zap,
-  CheckCircle,
-  Clock,
-  Sparkles
+  SlidersHorizontal,
+  FileCode,
+  HardDrive
 } from 'lucide-react';
 import * as api from './api';
 import type {
@@ -22,722 +21,184 @@ import type {
   SearchResult,
   FolderConfig,
   IndexStats,
-  IndexingProgress,
-  BenchmarkResult,
-  HistoryEntry
+  BenchmarkResult
 } from './api';
 
-type Tab = 'search' | 'folders' | 'benchmark';
-
 export default function App() {
-  const [tab, setTab] = useState<Tab>('search');
-  const [backendUp, setBackendUp] = useState<boolean>(true);
-  const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'error' }[]>([]);
-
-  const toast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
-    const id = Date.now();
-    setToasts(t => [...t, { id, msg, type }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
-  }, []);
-
-  useEffect(() => {
-    api.checkHealth()
-      .then(() => setBackendUp(true))
-      .catch(() => setBackendUp(false));
-  }, []);
-
-  return (
-    <>
-      <header className="header">
-        <div className="brand">
-          <FileText size={18} color="#3b82f6" />
-          <span>Findex</span>
-          <span className="brand-badge">Local Engine</span>
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              backgroundColor: backendUp ? '#10b981' : '#ef4444',
-              display: 'inline-block',
-              marginLeft: 4
-            }}
-            title={backendUp ? 'Backend Connected' : 'Backend Disconnected'}
-          />
-        </div>
-
-        <nav className="nav-tabs">
-          <button
-            className={`nav-tab ${tab === 'search' ? 'active' : ''}`}
-            onClick={() => setTab('search')}
-          >
-            <Search size={15} />
-            <span>Search</span>
-          </button>
-          <button
-            className={`nav-tab ${tab === 'folders' ? 'active' : ''}`}
-            onClick={() => setTab('folders')}
-          >
-            <FolderOpen size={15} />
-            <span>Folders</span>
-          </button>
-          <button
-            className={`nav-tab ${tab === 'benchmark' ? 'active' : ''}`}
-            onClick={() => setTab('benchmark')}
-          >
-            <Activity size={15} />
-            <span>Benchmark & Stats</span>
-          </button>
-        </nav>
-      </header>
-
-      <main className="container">
-        {tab === 'search' && <SearchTab toast={toast} />}
-        {tab === 'folders' && <FoldersTab toast={toast} />}
-        {tab === 'benchmark' && <BenchmarkTab toast={toast} />}
-      </main>
-
-      <div className="toast-container">
-        {toasts.map(t => (
-          <div key={t.id} className={`toast ${t.type}`}>{t.msg}</div>
-        ))}
-      </div>
-    </>
-  );
-}
-
-/* ==================== SEARCH TAB ==================== */
-function SearchTab({ toast }: { toast: (m: string, t?: 'success' | 'error') => void }) {
   const [query, setQuery] = useState('');
   const [rankingMode, setRankingMode] = useState('bm25');
   const [fileType, setFileType] = useState('');
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const debounceTimer = useRef<ReturnType<typeof setTimeout>>();
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [backendUp, setBackendUp] = useState(true);
 
-  // Global '/' shortcut to focus search input
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === '/' && document.activeElement !== inputRef.current) {
-        e.preventDefault();
-        inputRef.current?.focus();
-      } else if (e.key === 'Escape') {
-        inputRef.current?.blur();
-        setShowSuggestions(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+  const [foldersModal, setFoldersModal] = useState(false);
+  const [benchModal, setBenchModal] = useState(false);
+  const [folders, setFolders] = useState<FolderConfig[]>([]);
+  const [newFolderPath, setNewFolderPath] = useState('');
+  const [newFolderName, setNewFolderName] = useState('');
+  const [stats, setStats] = useState<IndexStats | null>(null);
+  const [benchQuery, setBenchQuery] = useState('data OR java');
+  const [benchResult, setBenchResult] = useState<BenchmarkResult | null>(null);
+  const [benchLoading, setBenchLoading] = useState(false);
+
+  const [copied, setCopied] = useState(false);
+  const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const toast = useCallback((msg: string) => {
+    const id = Date.now();
+    setToasts(t => [...t, { id, msg }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 2500);
   }, []);
 
-  const executeSearch = useCallback(async (q: string, modeOverride?: string, typeOverride?: string) => {
-    const targetQuery = q.trim();
-    if (!targetQuery) return;
+  const loadHealthAndStats = useCallback(async () => {
+    try {
+      await api.checkHealth();
+      setBackendUp(true);
+      const s = await api.getStats();
+      setStats(s);
+    } catch {
+      setBackendUp(false);
+    }
+  }, []);
+
+  const loadFolders = useCallback(async () => {
+    try {
+      const data = await api.getFolders();
+      setFolders(data);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    loadHealthAndStats();
+    loadFolders();
+  }, [loadHealthAndStats, loadFolders]);
+
+  const runSearch = useCallback(async (q: string, modeOverride?: string, typeOverride?: string) => {
+    const targetQ = q.trim();
+    if (!targetQ) {
+      setResponse(null);
+      return;
+    }
     setLoading(true);
-    setShowSuggestions(false);
     try {
       const mode = modeOverride ?? rankingMode;
       const type = typeOverride !== undefined ? typeOverride : fileType;
-      const res = await api.searchDocuments(targetQuery, mode, type || undefined);
+      const res = await api.searchDocuments(targetQ, mode, type || undefined);
       setResponse(res);
+      setSelectedIndex(0);
     } catch (e: unknown) {
-      toast((e as Error).message, 'error');
+      toast((e as Error).message);
     } finally {
       setLoading(false);
     }
   }, [rankingMode, fileType, toast]);
 
-  const handleInputChange = (val: string) => {
+  const onSearchChange = (val: string) => {
     setQuery(val);
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-
-    if (val.trim().length >= 2) {
-      debounceTimer.current = setTimeout(async () => {
-        try {
-          const sug = await api.getSuggestions(val);
-          setSuggestions(sug);
-          setShowSuggestions(sug.length > 0);
-        } catch {
-          // ignore suggestions error
-        }
-      }, 150);
-    } else {
-      setShowSuggestions(false);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!val.trim()) {
+      setResponse(null);
+      return;
     }
+    debounceRef.current = setTimeout(() => {
+      runSearch(val);
+    }, 180);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement !== searchInputRef.current && !foldersModal && !benchModal) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (e.key === 'Escape') {
+        if (foldersModal) setFoldersModal(false);
+        else if (benchModal) setBenchModal(false);
+        else if (query) {
+          setQuery('');
+          setResponse(null);
+        }
+      } else if (response && response.results.length > 0 && !foldersModal && !benchModal) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSelectedIndex(prev => Math.min(prev + 1, response.results.length - 1));
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSelectedIndex(prev => Math.max(prev - 1, 0));
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [foldersModal, benchModal, query, response]);
 
   const handleOpenDoc = async (id: number) => {
     try {
       await api.openDocument(id);
-      toast('Opened in system editor');
+      toast('Document opened');
     } catch (e: unknown) {
-      toast((e as Error).message, 'error');
+      toast((e as Error).message);
     }
   };
 
-  return (
-    <div>
-      <div className="search-wrapper">
-        <div className="search-input-box">
-          <Search size={18} className="search-icon" />
-          <input
-            ref={inputRef}
-            type="text"
-            className="search-input"
-            placeholder="Search documents... (e.g. java AND classes, algorithms, or -python)"
-            value={query}
-            onChange={e => handleInputChange(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                executeSearch(query);
-              }
-            }}
-            autoFocus
-          />
-          {query ? (
-            <button
-              className="clear-btn"
-              onClick={() => {
-                setQuery('');
-                setResponse(null);
-                setShowSuggestions(false);
-                inputRef.current?.focus();
-              }}
-              title="Clear"
-            >
-              <X size={16} />
-            </button>
-          ) : (
-            <span className="kbd-shortcut">/</span>
-          )}
-        </div>
-
-        {/* Suggestions Popup */}
-        {showSuggestions && suggestions.length > 0 && (
-          <div
-            style={{
-              position: 'relative',
-              background: 'var(--bg-surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              marginTop: 6,
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
-              zIndex: 40
-            }}
-          >
-            {suggestions.map(s => (
-              <div
-                key={s}
-                style={{
-                  padding: '8px 14px',
-                  fontSize: 13,
-                  cursor: 'pointer',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8
-                }}
-                onMouseDown={() => {
-                  setQuery(s);
-                  executeSearch(s);
-                }}
-              >
-                <Search size={12} color="var(--text-muted)" />
-                <span>{s}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Filter and Mode Controls */}
-        <div className="controls-bar">
-          <div className="filter-group">
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', marginRight: 4 }}>Filter:</span>
-            {['', 'txt', 'java', 'md', 'pdf'].map(ext => (
-              <button
-                key={ext}
-                className={`filter-chip ${fileType === ext ? 'active' : ''}`}
-                onClick={() => {
-                  setFileType(ext);
-                  if (query.trim()) executeSearch(query, rankingMode, ext);
-                }}
-              >
-                {ext === '' ? 'All Files' : `.${ext}`}
-              </button>
-            ))}
-          </div>
-
-          <div className="filter-group">
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Ranking:</span>
-            <select
-              className="select-compact"
-              value={rankingMode}
-              onChange={e => {
-                const newMode = e.target.value;
-                setRankingMode(newMode);
-                if (query.trim()) executeSearch(query, newMode);
-              }}
-            >
-              <option value="bm25">BM25 (Default)</option>
-              <option value="tfidf">TF-IDF</option>
-            </select>
-
-            <button
-              className="btn btn-primary btn-sm"
-              style={{ marginLeft: 6 }}
-              disabled={loading || !query.trim()}
-              onClick={() => executeSearch(query)}
-            >
-              {loading ? <RefreshCw size={12} className="spin" /> : 'Search'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Results or Hints */}
-      {response ? (
-        <div>
-          <div className="results-meta">
-            <span>
-              {response.totalResults} document{response.totalResults === 1 ? '' : 's'} found in{' '}
-              <strong style={{ color: 'var(--text-primary)' }}>{response.timeTakenMs} ms</strong>{' '}
-              ({response.mode.toUpperCase()} model)
-            </span>
-          </div>
-
-          {response.results.length === 0 ? (
-            <div className="empty-state">
-              <p>No matching documents found for "{response.query}".</p>
-              <p style={{ fontSize: 12, marginTop: 6, color: 'var(--text-muted)' }}>
-                Try adjusting your Boolean terms or searching for broader keywords.
-              </p>
-            </div>
-          ) : (
-            <div className="results-list">
-              {response.results.map(r => (
-                <ResultCardItem key={r.document.id} result={r} onOpen={handleOpenDoc} />
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="empty-state">
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-            Instant search across registered local code, markdown, and text notes.
-          </p>
-
-          <div className="query-tips">
-            <div
-              className="tip-card"
-              onClick={() => {
-                setQuery('java AND classes');
-                executeSearch('java AND classes');
-              }}
-            >
-              <div className="tip-query">java AND classes</div>
-              <div className="tip-desc">Boolean intersection: both terms must be present</div>
-            </div>
-
-            <div
-              className="tip-card"
-              onClick={() => {
-                setQuery('algorithms OR inheritance');
-                executeSearch('algorithms OR inheritance');
-              }}
-            >
-              <div className="tip-query">algorithms OR inheritance</div>
-              <div className="tip-desc">Boolean union: matches either term with ranked scores</div>
-            </div>
-
-            <div
-              className="tip-card"
-              onClick={() => {
-                setQuery('programming -python');
-                executeSearch('programming -python');
-              }}
-            >
-              <div className="tip-query">programming -python</div>
-              <div className="tip-desc">Exclusion: finds programming without python</div>
-            </div>
-
-            <div
-              className="tip-card"
-              onClick={() => {
-                setQuery('"classes and inheritance"');
-                executeSearch('"classes and inheritance"');
-              }}
-            >
-              <div className="tip-query">"classes and inheritance"</div>
-              <div className="tip-desc">Positional phrase search: exact adjacent sequence</div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ResultCardItem({
-  result,
-  onOpen
-}: {
-  result: SearchResult;
-  onOpen: (id: number) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="result-card">
-      <div className="result-header">
-        <div className="result-title-group">
-          <span className="file-badge">{result.document.extension}</span>
-          <span className="result-title">{result.document.fileName}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="score-badge">Score: {result.score}</span>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => onOpen(result.document.id)}
-            title="Open in default editor"
-          >
-            <ExternalLink size={12} />
-            <span>Open</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="result-path">{result.document.filePath}</div>
-
-      <div
-        className="result-snippet"
-        dangerouslySetInnerHTML={{ __html: result.snippet || 'No snippet preview available' }}
-      />
-
-      <div className="result-footer">
-        <div className="matched-tags">
-          {result.matchedTerms.map(t => (
-            <span key={t} className="matched-tag">{t}</span>
-          ))}
-          <span style={{ marginLeft: 6 }}>{result.matchCount} occurrences</span>
-        </div>
-
-        <button
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'var(--text-muted)',
-            cursor: 'pointer',
-            fontSize: 11,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4
-          }}
-          onClick={() => setExpanded(!expanded)}
-        >
-          <span>Score Breakdown</span>
-          {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-        </button>
-      </div>
-
-      {expanded && (
-        <div
-          style={{
-            marginTop: 10,
-            padding: '8px 12px',
-            background: 'var(--bg-app)',
-            borderRadius: 6,
-            fontSize: 11,
-            fontFamily: 'JetBrains Mono, monospace',
-            color: 'var(--text-muted)',
-            border: '1px solid var(--border)'
-          }}
-        >
-          {result.scoreExplanation}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ==================== FOLDERS TAB ==================== */
-function FoldersTab({ toast }: { toast: (m: string, t?: 'success' | 'error') => void }) {
-  const [folders, setFolders] = useState<FolderConfig[]>([]);
-  const [pathInput, setPathInput] = useState('');
-  const [nameInput, setNameInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState<IndexingProgress | null>(null);
-
-  const fetchFolders = useCallback(async () => {
-    try {
-      const data = await api.getFolders();
-      setFolders(data);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const p = await api.getIndexStatus();
-      setProgress(p);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchFolders();
-    fetchStatus();
-    const timer = setInterval(fetchStatus, 1500);
-    return () => clearInterval(timer);
-  }, [fetchFolders, fetchStatus]);
+  const handleCopyPath = (filePath: string) => {
+    navigator.clipboard.writeText(filePath);
+    setCopied(true);
+    toast('File path copied');
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleAddFolder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pathInput.trim()) return;
-    setLoading(true);
+    if (!newFolderPath.trim()) return;
     try {
-      await api.addFolder(pathInput.trim(), nameInput.trim() || undefined);
-      setPathInput('');
-      setNameInput('');
+      await api.addFolder(newFolderPath.trim(), newFolderName.trim() || undefined);
+      setNewFolderPath('');
+      setNewFolderName('');
       toast('Folder registered and indexed');
-      fetchFolders();
+      loadFolders();
+      loadHealthAndStats();
     } catch (err: unknown) {
-      toast((err as Error).message, 'error');
-    } finally {
-      setLoading(false);
+      toast((err as Error).message);
     }
   };
 
-  const handleReindex = async (id: string) => {
-    try {
-      await api.reindexFolder(id);
-      toast('Reindexing started');
-      fetchFolders();
-    } catch (err: unknown) {
-      toast((err as Error).message, 'error');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
+  const handleDeleteFolder = async (id: string) => {
     try {
       await api.deleteFolder(id);
       toast('Folder removed');
-      fetchFolders();
+      loadFolders();
+      loadHealthAndStats();
     } catch (err: unknown) {
-      toast((err as Error).message, 'error');
+      toast((err as Error).message);
+    }
+  };
+
+  const handleReindexFolder = async (id: string) => {
+    try {
+      await api.reindexFolder(id);
+      toast('Reindexing started');
+      loadFolders();
+      loadHealthAndStats();
+    } catch (err: unknown) {
+      toast((err as Error).message);
     }
   };
 
   const handleRebuildAll = async () => {
     try {
       await api.rebuildIndex();
-      toast('Full index rebuild triggered');
-      fetchFolders();
+      toast('Rebuilding all indexes');
+      loadFolders();
+      loadHealthAndStats();
     } catch (err: unknown) {
-      toast((err as Error).message, 'error');
+      toast((err as Error).message);
     }
   };
-
-  return (
-    <div>
-      {/* Index Status Banner */}
-      {progress && (
-        <div
-          style={{
-            background: 'var(--bg-surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            padding: '12px 16px',
-            marginBottom: 20,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            fontSize: 13
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span
-              style={{
-                fontSize: 11,
-                fontFamily: 'JetBrains Mono, monospace',
-                fontWeight: 600,
-                padding: '2px 8px',
-                borderRadius: 4,
-                background:
-                  progress.status === 'INDEXING' || progress.status === 'SCANNING'
-                    ? 'var(--warning-soft)'
-                    : progress.status === 'COMPLETED'
-                    ? 'var(--success-soft)'
-                    : 'var(--bg-elevated)',
-                color:
-                  progress.status === 'INDEXING' || progress.status === 'SCANNING'
-                    ? 'var(--warning)'
-                    : progress.status === 'COMPLETED'
-                    ? 'var(--success)'
-                    : 'var(--text-secondary)'
-              }}
-            >
-              {progress.status}
-            </span>
-            <span style={{ color: 'var(--text-secondary)' }}>
-              {progress.status === 'INDEXING'
-                ? `Indexing ${progress.currentFile || ''} (${progress.indexedFiles}/${progress.totalFiles})`
-                : progress.status === 'COMPLETED'
-                ? `${progress.indexedFiles} files indexed in ${progress.durationMs} ms`
-                : 'Index is up to date'}
-            </span>
-          </div>
-
-          <button className="btn btn-secondary btn-sm" onClick={handleRebuildAll}>
-            <RefreshCw size={12} />
-            <span>Rebuild All</span>
-          </button>
-        </div>
-      )}
-
-      {/* Register Folder Card */}
-      <div className="card">
-        <h3 className="card-title">Register a Directory</h3>
-        <p className="card-desc">
-          Add a local folder containing text files, Markdown, Java code, or PDFs to make them searchable.
-        </p>
-
-        <form onSubmit={handleAddFolder} className="form-row">
-          <input
-            type="text"
-            className="input-text"
-            placeholder="Absolute folder path (e.g. C:/Users/joy/Desktop/findex/documents)"
-            value={pathInput}
-            onChange={e => setPathInput(e.target.value)}
-          />
-          <input
-            type="text"
-            className="input-text"
-            style={{ maxWidth: 180 }}
-            placeholder="Folder Name (optional)"
-            value={nameInput}
-            onChange={e => setNameInput(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={loading || !pathInput.trim()}
-          >
-            <Plus size={14} />
-            <span>{loading ? 'Adding...' : 'Register'}</span>
-          </button>
-        </form>
-
-        <div style={{ marginTop: 10 }}>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => {
-              setPathInput('C:/Users/joy/Desktop/findex/documents');
-              setNameInput('Sample Documents');
-            }}
-          >
-            <Sparkles size={11} color="var(--accent)" />
-            <span>Auto-fill Sample Documents</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Registered Folders List */}
-      <div className="card">
-        <h3 className="card-title">Registered Directories ({folders.length})</h3>
-        <p className="card-desc">All directories actively maintained in the inverted index.</p>
-
-        {folders.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No folders registered yet.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {folders.map(f => (
-              <div
-                key={f.id}
-                style={{
-                  background: 'var(--bg-app)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: '12px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12
-                }}
-              >
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <FolderOpen size={16} color="var(--accent)" />
-                    <strong style={{ fontSize: 14 }}>{f.name}</strong>
-                    <span className="file-badge">{f.fileCount} docs</span>
-                  </div>
-                  <div className="result-path" style={{ marginTop: 4, marginBottom: 0 }}>
-                    {f.path}
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleReindex(f.id)}
-                    title="Reindex this folder"
-                  >
-                    <RefreshCw size={12} />
-                    <span>Reindex</span>
-                  </button>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleDelete(f.id)}
-                    title="Remove folder"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ==================== BENCHMARK & STATS TAB ==================== */
-function BenchmarkTab({ toast }: { toast: (m: string, t?: 'success' | 'error') => void }) {
-  const [stats, setStats] = useState<IndexStats | null>(null);
-  const [benchQuery, setBenchQuery] = useState('data OR java');
-  const [benchResult, setBenchResult] = useState<BenchmarkResult | null>(null);
-  const [benchLoading, setBenchLoading] = useState(false);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-
-  const fetchStats = useCallback(async () => {
-    try {
-      const s = await api.getStats();
-      setStats(s);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const fetchHistory = useCallback(async () => {
-    try {
-      const h = await api.getHistory(15);
-      setHistory(h);
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchStats();
-    fetchHistory();
-  }, [fetchStats, fetchHistory]);
 
   const runBenchmarkTest = async () => {
     if (!benchQuery.trim()) return;
@@ -745,182 +206,421 @@ function BenchmarkTab({ toast }: { toast: (m: string, t?: 'success' | 'error') =
     try {
       const res = await api.runBenchmark(benchQuery.trim());
       setBenchResult(res);
-      toast('Benchmark completed');
-      fetchHistory();
-    } catch (e: unknown) {
-      toast((e as Error).message, 'error');
+      toast('Benchmark finished');
+    } catch (err: unknown) {
+      toast((err as Error).message);
     } finally {
       setBenchLoading(false);
     }
   };
 
-  const handleClearHistory = async () => {
-    try {
-      await api.clearHistory();
-      setHistory([]);
-      toast('Search history cleared');
-    } catch (e: unknown) {
-      toast((e as Error).message, 'error');
-    }
-  };
+  const selectedResult: SearchResult | undefined = response?.results[selectedIndex];
 
   return (
-    <div>
-      {/* Engine Metrics Grid */}
-      <div className="stats-grid">
-        <div className="stat-item">
-          <div className="stat-label">Total Documents</div>
-          <div className="stat-value">{stats ? stats.totalDocuments : '...'}</div>
-        </div>
-        <div className="stat-item">
-          <div className="stat-label">Unique Terms</div>
-          <div className="stat-value">{stats ? stats.uniqueTerms.toLocaleString() : '...'}</div>
-        </div>
-        <div className="stat-item">
-          <div className="stat-label">Total Postings</div>
-          <div className="stat-value">{stats ? stats.totalPostings.toLocaleString() : '...'}</div>
-        </div>
-        <div className="stat-item">
-          <div className="stat-label">Avg Doc Length</div>
-          <div className="stat-value">{stats ? stats.avgDocLength.toFixed(1) : '...'}</div>
-        </div>
-        <div className="stat-item">
-          <div className="stat-label">JVM Memory</div>
-          <div className="stat-value">{stats ? `${stats.memoryUsageMb} MB` : '...'}</div>
-        </div>
-      </div>
-
-      {/* Empirical Benchmark Card */}
-      <div className="card">
-        <h3 className="card-title">Empirical Performance Benchmark</h3>
-        <p className="card-desc">
-          Executes identical queries against both the Inverted Index Engine and the Linear Scan
-          baseline engine to measure algorithmic speedup.
-        </p>
-
-        <div className="form-row">
-          <input
-            type="text"
-            className="input-text"
-            value={benchQuery}
-            onChange={e => setBenchQuery(e.target.value)}
-            placeholder="Query string (e.g. data OR java)"
+    <div className="desktop-app">
+      <header className="top-bar">
+        <div className="brand-section">
+          <FileCode size={20} color="#3b82f6" />
+          <span>Findex</span>
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              backgroundColor: backendUp ? '#10b981' : '#ef4444',
+              display: 'inline-block'
+            }}
+            title={backendUp ? 'Engine Online' : 'Engine Offline'}
           />
-          <button
-            className="btn btn-primary"
-            onClick={runBenchmarkTest}
-            disabled={benchLoading || !benchQuery.trim()}
-          >
-            <Zap size={14} />
-            <span>{benchLoading ? 'Benchmarking...' : 'Run Benchmark'}</span>
-          </button>
         </div>
 
-        {benchResult && (
-          <div className="benchmark-box">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span className="speedup-badge">
-                Inverted Index Speedup: {benchResult.speedupFactor}x Faster
-              </span>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Matched {benchResult.matchingDocuments} of {benchResult.totalDocumentsScanned} documents
-              </span>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  padding: '12px 16px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border)'
-                }}
-              >
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  Inverted Index Engine
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', marginTop: 4 }}>
-                  {benchResult.invertedIndexMs} ms
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-                  Direct hash-postings lookup with AST pruning
-                </div>
-              </div>
-
-              <div
-                style={{
-                  background: 'var(--bg-elevated)',
-                  padding: '12px 16px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border)'
-                }}
-              >
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-                  Linear Scan Engine
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#f59e0b', marginTop: 4 }}>
-                  {benchResult.linearScanMs} ms
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
-                  Sequential string scanning over entire document store
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Query History Log */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div>
-            <h3 className="card-title">Search Query History</h3>
-            <p className="card-desc" style={{ marginBottom: 0 }}>
-              Recent queries and recorded response latencies stored in local SQLite database.
-            </p>
-          </div>
-          {history.length > 0 && (
-            <button className="btn btn-secondary btn-sm" onClick={handleClearHistory}>
-              <Trash2 size={12} />
-              <span>Clear History</span>
+        <div className="search-field-container">
+          <Search size={16} color="var(--text-muted)" style={{ marginRight: 8, flexShrink: 0 }} />
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="search-field-input"
+            placeholder="Search documents... (e.g. java AND classes, algorithms, -python)"
+            value={query}
+            onChange={e => onSearchChange(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') runSearch(query);
+            }}
+            autoFocus
+          />
+          {query ? (
+            <button
+              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 2 }}
+              onClick={() => {
+                setQuery('');
+                setResponse(null);
+                searchInputRef.current?.focus();
+              }}
+            >
+              <X size={15} />
             </button>
+          ) : (
+            <span className="kbd-badge">/</span>
           )}
         </div>
 
-        {history.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No search history recorded yet.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {history.map(h => (
-              <div
-                key={h.id}
-                style={{
-                  background: 'var(--bg-app)',
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: 12
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Clock size={12} color="var(--text-muted)" />
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-primary)' }}>
-                    {h.query}
-                  </span>
-                  <span className="file-badge">{h.mode.toUpperCase()}</span>
-                </div>
+        <div className="actions-section">
+          <select
+            className="filter-select"
+            value={fileType}
+            onChange={e => {
+              const val = e.target.value;
+              setFileType(val);
+              if (query.trim()) runSearch(query, rankingMode, val);
+            }}
+          >
+            <option value="">All Formats</option>
+            <option value="txt">.txt</option>
+            <option value="java">.java</option>
+            <option value="md">.md</option>
+            <option value="pdf">.pdf</option>
+          </select>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: 'var(--text-muted)' }}>
-                  <span>{h.resultCount} result{h.resultCount === 1 ? '' : 's'}</span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{h.latencyMs} ms</span>
+          <select
+            className="filter-select"
+            value={rankingMode}
+            onChange={e => {
+              const m = e.target.value;
+              setRankingMode(m);
+              if (query.trim()) runSearch(query, m, fileType);
+            }}
+          >
+            <option value="bm25">BM25</option>
+            <option value="tfidf">TF-IDF</option>
+          </select>
+
+          <button className="icon-btn" onClick={() => setFoldersModal(true)}>
+            <FolderOpen size={14} />
+            <span>Folders ({folders.length})</span>
+          </button>
+
+          <button className="icon-btn" onClick={() => { setBenchModal(true); loadHealthAndStats(); }}>
+            <Zap size={14} />
+            <span>Benchmark</span>
+          </button>
+        </div>
+      </header>
+
+      <div className="main-split">
+        <aside className="results-pane">
+          <div className="results-status-bar">
+            <span>
+              {response ? `${response.totalResults} results (${response.timeTakenMs} ms)` : 'Search results'}
+            </span>
+            {loading && <RefreshCw size={12} className="spin" />}
+          </div>
+
+          <div className="results-scroll">
+            {response && response.results.length > 0 ? (
+              response.results.map((r, idx) => (
+                <div
+                  key={r.document.id}
+                  className={`item-card ${selectedIndex === idx ? 'selected' : ''}`}
+                  onClick={() => setSelectedIndex(idx)}
+                >
+                  <div className="item-header">
+                    <div className="item-title-group">
+                      <span className="tag-badge">{r.document.extension}</span>
+                      <span className="item-name">{r.document.fileName}</span>
+                    </div>
+                    <span className="item-score">{r.score.toFixed(3)}</span>
+                  </div>
+
+                  <div
+                    className="item-snippet"
+                    dangerouslySetInnerHTML={{ __html: r.snippet || r.document.previewText }}
+                  />
+
+                  <div className="item-path">{r.document.filePath}</div>
+                </div>
+              ))
+            ) : response && response.results.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                No documents matched "{response.query}".
+              </div>
+            ) : (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                <p style={{ marginBottom: 16 }}>Type a keyword or click a query to search:</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[
+                    ['java AND classes', 'Boolean AND intersection'],
+                    ['algorithms OR inheritance', 'Boolean OR union'],
+                    ['programming -python', 'Exclusion with prefix -'],
+                    ['"classes and inheritance"', 'Exact phrase matching']
+                  ].map(([q, desc]) => (
+                    <button
+                      key={q}
+                      className="icon-btn"
+                      style={{ justifyContent: 'space-between', width: '100%' }}
+                      onClick={() => {
+                        setQuery(q);
+                        runSearch(q);
+                      }}
+                    >
+                      <span style={{ fontFamily: 'JetBrains Mono, monospace', color: 'var(--accent)' }}>{q}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{desc}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
           </div>
-        )}
+        </aside>
+
+        <main className="inspector-pane">
+          {selectedResult ? (
+            <>
+              <div className="inspector-header">
+                <div className="inspector-meta">
+                  <div className="inspector-title">{selectedResult.document.fileName}</div>
+                  <div className="inspector-path">{selectedResult.document.filePath}</div>
+                </div>
+
+                <div className="inspector-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={() => handleCopyPath(selectedResult.document.filePath)}
+                  >
+                    {copied ? <Check size={13} color="var(--success)" /> : <Copy size={13} />}
+                    <span>{copied ? 'Copied' : 'Copy Path'}</span>
+                  </button>
+
+                  <button
+                    className="btn-primary"
+                    onClick={() => handleOpenDoc(selectedResult.document.id)}
+                  >
+                    <ExternalLink size={13} />
+                    <span>Open File</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="inspector-body">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+                  <div className="stat-box">
+                    <span className="stat-txt">Relevance</span>
+                    <span className="stat-num">{selectedResult.score}</span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="stat-txt">Matches</span>
+                    <span className="stat-num">{selectedResult.matchCount}</span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="stat-txt">Total Terms</span>
+                    <span className="stat-num">{selectedResult.document.termCount}</span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="stat-txt">File Size</span>
+                    <span className="stat-num">{selectedResult.document.fileSize} B</span>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+                    Score Breakdown
+                  </div>
+                  <div style={{ background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px', fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-secondary)' }}>
+                    {selectedResult.scoreExplanation || 'Direct Boolean match'}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 6 }}>
+                    Document Content Preview
+                  </div>
+                  <div
+                    className="preview-code-block"
+                    dangerouslySetInnerHTML={{ __html: selectedResult.snippet || selectedResult.document.previewText }}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="empty-inspector">
+              <FileText size={32} color="var(--text-muted)" style={{ marginBottom: 8 }} />
+              <p>Select a document on the left to inspect content and score breakdown.</p>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                Navigate items with <kbd className="kbd-badge">↑</kbd> and <kbd className="kbd-badge">↓</kbd> keys.
+              </p>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {foldersModal && (
+        <div className="modal-backdrop" onClick={() => setFoldersModal(false)}>
+          <div className="modal-window" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Indexed Folders ({folders.length})</span>
+              <button
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                onClick={() => setFoldersModal(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <form onSubmit={handleAddFolder} className="input-row">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Absolute folder path (e.g. C:/Users/joy/Desktop/findex/documents)"
+                  value={newFolderPath}
+                  onChange={e => setNewFolderPath(e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="form-input"
+                  style={{ maxWidth: 140 }}
+                  placeholder="Name (optional)"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                />
+                <button type="submit" className="btn-primary" disabled={!newFolderPath.trim()}>
+                  <Plus size={13} />
+                  <span>Add</span>
+                </button>
+              </form>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setNewFolderPath('C:/Users/joy/Desktop/findex/documents');
+                    setNewFolderName('Sample Documents');
+                  }}
+                >
+                  Auto-fill Sample Documents
+                </button>
+
+                <button type="button" className="btn-secondary" onClick={handleRebuildAll}>
+                  <RefreshCw size={12} />
+                  <span>Rebuild All</span>
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                {folders.map(f => (
+                  <div key={f.id} className="folder-item">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 600, color: '#fff' }}>{f.name}</div>
+                      <div style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {f.path}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
+                        {f.fileCount} documents indexed
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button className="btn-secondary" onClick={() => handleReindexFolder(f.id)} title="Reindex folder">
+                        <RefreshCw size={12} />
+                      </button>
+                      <button
+                        style={{ background: 'var(--danger-soft)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--danger)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}
+                        onClick={() => handleDeleteFolder(f.id)}
+                        title="Delete folder"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {benchModal && (
+        <div className="modal-backdrop" onClick={() => setBenchModal(false)}>
+          <div className="modal-window" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">Engine Performance & Benchmark</span>
+              <button
+                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                onClick={() => setBenchModal(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                <div className="stat-box">
+                  <span className="stat-txt">Documents</span>
+                  <span className="stat-num">{stats?.totalDocuments ?? 0}</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-txt">Unique Terms</span>
+                  <span className="stat-num">{stats?.uniqueTerms ?? 0}</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-txt">Postings</span>
+                  <span className="stat-num">{stats?.totalPostings ?? 0}</span>
+                </div>
+                <div className="stat-box">
+                  <span className="stat-txt">JVM Memory</span>
+                  <span className="stat-num">{stats ? `${stats.memoryUsageMb}M` : '...'}</span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', marginBottom: 6 }}>
+                  Empirical Benchmark (Inverted Index vs. Linear Scan)
+                </div>
+                <div className="input-row">
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={benchQuery}
+                    onChange={e => setBenchQuery(e.target.value)}
+                    placeholder="Benchmark query (e.g. data OR java)"
+                  />
+                  <button className="btn-primary" onClick={runBenchmarkTest} disabled={benchLoading || !benchQuery.trim()}>
+                    <Zap size={13} />
+                    <span>{benchLoading ? 'Running...' : 'Run Benchmark'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {benchResult && (
+                <div style={{ background: 'var(--bg-app)', border: '1px solid var(--border)', borderRadius: 8, padding: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--success)', marginBottom: 8 }}>
+                    Speedup: {benchResult.speedupFactor}x Faster with Inverted Index
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12 }}>
+                    <div style={{ background: 'var(--bg-elevated)', padding: 10, borderRadius: 6 }}>
+                      <div style={{ color: 'var(--text-muted)' }}>Inverted Index</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)', marginTop: 2 }}>
+                        {benchResult.invertedIndexMs} ms
+                      </div>
+                    </div>
+                    <div style={{ background: 'var(--bg-elevated)', padding: 10, borderRadius: 6 }}>
+                      <div style={{ color: 'var(--text-muted)' }}>Linear Scan baseline</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--warning)', marginTop: 2 }}>
+                        {benchResult.linearScanMs} ms
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className="toast-msg">{t.msg}</div>
+        ))}
       </div>
     </div>
   );

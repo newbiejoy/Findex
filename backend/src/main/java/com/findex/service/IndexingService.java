@@ -33,7 +33,7 @@ public class IndexingService {
 
     @PostConstruct
     public void init() {
-        // Automatically register initial default "documents" folder if present in current dir
+
         File defaultDocs = new File("documents");
         if (defaultDocs.exists() && defaultDocs.isDirectory()) {
             try {
@@ -44,7 +44,6 @@ public class IndexingService {
             } catch (Exception ignored) {}
         }
 
-        // Restore documents and index on startup
         reindexAll();
     }
 
@@ -73,7 +72,6 @@ public class IndexingService {
         FolderConfig folder = new FolderConfig(id, absPath, name, 0, System.currentTimeMillis(), 0);
         dbManager.saveFolder(folder);
 
-        // Reindex asynchronously
         reindexFolder(id);
 
         return folder;
@@ -81,7 +79,7 @@ public class IndexingService {
 
     public void removeFolder(String folderId) {
         dbManager.deleteFolder(folderId);
-        // Remove associated docs from index
+
         for (IndexedDocument doc : index.getAllDocuments()) {
             if (folderId.equals(doc.getFolderId())) {
                 index.removeDocument(doc.getId());
@@ -102,9 +100,9 @@ public class IndexingService {
                 indexFolderInternal(folder);
             }
             currentProgress = new IndexingProgress(
-                IndexingProgress.Status.COMPLETED, 
-                currentProgress.getTotalFiles(), 
-                currentProgress.getIndexedFiles(), 
+                IndexingProgress.Status.COMPLETED,
+                currentProgress.getTotalFiles(),
+                currentProgress.getIndexedFiles(),
                 "", 100.0, null, currentProgress.getDurationMs()
             );
         }, executor);
@@ -116,7 +114,7 @@ public class IndexingService {
             if (opt.isEmpty()) return;
 
             FolderConfig folder = opt.get();
-            // Clear prior docs for this folder from index & db
+
             for (IndexedDocument doc : index.getAllDocuments()) {
                 if (folderId.equals(doc.getFolderId())) {
                     index.removeDocument(doc.getId());
@@ -133,7 +131,7 @@ public class IndexingService {
         Path root = Paths.get(folder.getPath());
         if (!Files.exists(root) || !Files.isDirectory(root)) {
             currentProgress = new IndexingProgress(
-                IndexingProgress.Status.FAILED, 0, 0, "", 0, 
+                IndexingProgress.Status.FAILED, 0, 0, "", 0,
                 "Directory does not exist: " + folder.getPath(), 0
             );
             return;
@@ -149,7 +147,7 @@ public class IndexingService {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
                     String name = dir.getFileName() != null ? dir.getFileName().toString() : "";
-                    if (name.startsWith(".") || "node_modules".equalsIgnoreCase(name) 
+                    if (name.startsWith(".") || "node_modules".equalsIgnoreCase(name)
                         || "target".equalsIgnoreCase(name) || "build".equalsIgnoreCase(name)
                         || "bin".equalsIgnoreCase(name) || ".git".equalsIgnoreCase(name)) {
                         return FileVisitResult.SKIP_SUBTREE;
@@ -176,7 +174,7 @@ public class IndexingService {
             String fileName = file.getFileName().toString();
             double percent = total > 0 ? (indexedCount * 100.0 / total) : 0;
             currentProgress = new IndexingProgress(
-                IndexingProgress.Status.INDEXING, total, indexedCount, fileName, 
+                IndexingProgress.Status.INDEXING, total, indexedCount, fileName,
                 Math.round(percent * 10.0) / 10.0, null, System.currentTimeMillis() - startTime
             );
 
@@ -189,7 +187,6 @@ public class IndexingService {
                 long size = Files.size(file);
                 long lastMod = Files.getLastModifiedTime(file).toMillis();
 
-                // Save preview text (up to 30KB for instant snippets and search inspection)
                 String preview = text.length() > 30000 ? text.substring(0, 30000) : text;
 
                 IndexedDocument doc = new IndexedDocument(

@@ -25,11 +25,9 @@ public class SnippetGenerator {
             return escapeHtml(text.substring(0, len).trim()) + (text.length() > windowSize ? "..." : "");
         }
 
-        // Clean extra whitespaces for smooth reading
         String cleanText = text.replaceAll("\\s+", " ").trim();
         String lowerText = cleanText.toLowerCase(Locale.ROOT);
 
-        // Find occurrences of all terms
         List<Integer> matchIndices = new ArrayList<>();
         for (String term : matchedTerms) {
             if (term.isBlank()) continue;
@@ -47,7 +45,6 @@ public class SnippetGenerator {
 
         Collections.sort(matchIndices);
 
-        // Find the window of size windowSize containing the maximum number of matches
         int bestStart = 0;
         int bestCount = 0;
 
@@ -70,7 +67,6 @@ public class SnippetGenerator {
             }
         }
 
-        // Adjust window start slightly backward so we don't cut words in the middle
         int start = Math.max(0, bestStart - 35);
         if (start > 0) {
             int prevSpace = cleanText.indexOf(' ', start);
@@ -90,7 +86,6 @@ public class SnippetGenerator {
         String rawSnippet = cleanText.substring(start, end).trim();
         String escapedSnippet = escapeHtml(rawSnippet);
 
-        // Highlight matched terms with <mark> tags
         for (String term : matchedTerms) {
             if (term.isBlank()) continue;
             String regex = "(?i)\\b(" + Pattern.quote(term) + ")\\b";

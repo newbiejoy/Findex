@@ -11,7 +11,7 @@ public class SearchResult implements Serializable, Comparable<SearchResult> {
     private final int matchCount;
     private final String scoreExplanation;
 
-    public SearchResult(IndexedDocument document, double score, List<String> matchedTerms, 
+    public SearchResult(IndexedDocument document, double score, List<String> matchedTerms,
                         String snippet, int matchCount, String scoreExplanation) {
         this.document = document;
         this.score = score;
@@ -30,6 +30,6 @@ public class SearchResult implements Serializable, Comparable<SearchResult> {
 
     @Override
     public int compareTo(SearchResult o) {
-        return Double.compare(o.score, this.score); // descending by score
+        return Double.compare(o.score, this.score);
     }
 }

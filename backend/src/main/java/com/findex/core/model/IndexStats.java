@@ -10,7 +10,7 @@ public class IndexStats implements Serializable {
     private final double memoryUsageMb;
     private final long lastIndexedAt;
 
-    public IndexStats(int totalDocuments, int uniqueTerms, long totalPostings, 
+    public IndexStats(int totalDocuments, int uniqueTerms, long totalPostings,
                       double avgDocLength, double memoryUsageMb, long lastIndexedAt) {
         this.totalDocuments = totalDocuments;
         this.uniqueTerms = uniqueTerms;

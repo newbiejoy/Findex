@@ -24,14 +24,12 @@ public class BenchmarkService {
     public BenchmarkResult runBenchmark(String query) {
         Collection<IndexedDocument> allDocs = indexingService.getIndex().getAllDocuments();
         if (query == null || query.isBlank()) {
-            query = "java"; // default benchmark query
+            query = "java";
         }
 
-        // Warm up both engines
         searchEngine.search(query, "bm25", null, null, 10);
         linearEngine.search(allDocs, query, 10);
 
-        // Run Inverted Index (Multiple iterations for high precision)
         int iterations = 10;
         long startInverted = System.nanoTime();
         SearchResponse invertedResponse = null;
@@ -40,7 +38,6 @@ public class BenchmarkService {
         }
         double invertedTimeMs = (System.nanoTime() - startInverted) / (iterations * 1_000_000.0);
 
-        // Run Linear Scan
         long startLinear = System.nanoTime();
         SearchResponse linearResponse = null;
         for (int i = 0; i < iterations; i++) {
@@ -48,7 +45,6 @@ public class BenchmarkService {
         }
         double linearTimeMs = (System.nanoTime() - startLinear) / (iterations * 1_000_000.0);
 
-        // Prevent division by zero
         double effectiveInverted = Math.max(0.001, invertedTimeMs);
         double speedup = linearTimeMs / effectiveInverted;
 

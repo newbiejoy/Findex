@@ -15,10 +15,8 @@ public class TfIdfScorer implements Scorer {
             return 0.0;
         }
 
-        // Sublinear TF scaling: 1 + ln(tf)
         double tf = 1.0 + Math.log(posting.getTermFrequency());
-        
-        // Smooth Inverse Document Frequency: ln(1 + N / df)
+
         double idf = Math.log(1.0 + ((double) totalDocs / docFreq));
 
         return tf * idf;

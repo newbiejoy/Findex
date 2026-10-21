@@ -82,13 +82,12 @@ public class EngineCoreTest {
 
     @Test
     void testBm25Ranking() {
-        // Document with high term frequency for "algorithm"
+
         String doc1Text = "Algorithm design and algorithm analysis with efficient algorithm steps";
         List<Token> tokens1 = tokenizer.tokenize(doc1Text);
         IndexedDocument doc1 = new IndexedDocument(1, "f1", "/path/doc1.txt", "doc1.txt", "txt", 100, 1000, tokens1.size(), doc1Text);
         index.addDocument(doc1, tokens1);
 
-        // Document with single occurrence
         String doc2Text = "An introduction to computer systems and an algorithm basics";
         List<Token> tokens2 = tokenizer.tokenize(doc2Text);
         IndexedDocument doc2 = new IndexedDocument(2, "f1", "/path/doc2.txt", "doc2.txt", "txt", 100, 1000, tokens2.size(), doc2Text);
@@ -112,7 +111,6 @@ public class EngineCoreTest {
         IndexedDocument doc2 = new IndexedDocument(2, "f1", "/path/doc2.txt", "doc2.txt", "txt", 100, 1000, tokens2.size(), doc2Text);
         index.addDocument(doc2, tokens2);
 
-        // Exact phrase query "quick brown"
         SearchResponse response = searchEngine.search("\"quick brown\"", "bm25", null, null, 10);
         assertEquals(1, response.getTotalResults());
         assertEquals(1, response.getResults().get(0).getDocument().getId());
@@ -130,22 +128,18 @@ public class EngineCoreTest {
         IndexedDocument doc2 = new IndexedDocument(2, "f1", "/path/doc2.txt", "doc2.txt", "txt", 100, 1000, tokens2.size(), doc2Text);
         index.addDocument(doc2, tokens2);
 
-        // Query: programming NOT java
         SearchResponse notResponse = searchEngine.search("programming NOT java", "bm25", null, null, 10);
         assertEquals(1, notResponse.getTotalResults());
         assertEquals(2, notResponse.getResults().get(0).getDocument().getId());
 
-        // Query: programming -java
         SearchResponse minusResponse = searchEngine.search("programming -java", "bm25", null, null, 10);
         assertEquals(1, minusResponse.getTotalResults());
         assertEquals(2, minusResponse.getResults().get(0).getDocument().getId());
 
-        // Query: java AND spring
         SearchResponse andResponse = searchEngine.search("java AND spring", "bm25", null, null, 10);
         assertEquals(1, andResponse.getTotalResults());
         assertEquals(1, andResponse.getResults().get(0).getDocument().getId());
 
-        // Query: spring OR django
         SearchResponse orResponse = searchEngine.search("spring OR django", "bm25", null, null, 10);
         assertEquals(2, orResponse.getTotalResults());
     }

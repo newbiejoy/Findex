@@ -93,7 +93,6 @@ export interface HistoryEntry {
   searchedAt: number;
 }
 
-// Search
 export const searchDocuments = (q: string, mode = 'bm25', type?: string, folderId?: string, limit = 30) => {
   const params = new URLSearchParams({ q, mode, limit: String(limit) });
   if (type) params.set('type', type);
@@ -104,7 +103,6 @@ export const searchDocuments = (q: string, mode = 'bm25', type?: string, folderI
 export const getSuggestions = (q: string, limit = 8) =>
   request<string[]>(`/suggestions?q=${encodeURIComponent(q)}&limit=${limit}`);
 
-// Folders
 export const getFolders = () => request<FolderConfig[]>('/folders');
 export const addFolder = (path: string, name?: string) =>
   request<FolderConfig>('/folders', { method: 'POST', body: JSON.stringify({ path, name }) });
@@ -113,7 +111,6 @@ export const deleteFolder = (id: string) =>
 export const reindexFolder = (id: string) =>
   request<{ status: string }>(`/folders/${id}/reindex`, { method: 'POST' });
 
-// Index
 export const rebuildIndex = () =>
   request<{ status: string }>('/index/rebuild', { method: 'POST' });
 export const getIndexStatus = () => request<IndexingProgress>('/index/status');
@@ -122,19 +119,15 @@ export const getTerms = (prefix = '', offset = 0, limit = 50) =>
   request<TermDetails[]>(`/terms?prefix=${encodeURIComponent(prefix)}&offset=${offset}&limit=${limit}`);
 export const getTermDetails = (term: string) => request<TermDetails>(`/terms/${encodeURIComponent(term)}`);
 
-// Documents
 export const openDocument = (id: number) =>
   request<{ status: string; path: string }>(`/documents/${id}/open`, { method: 'POST' });
 
-// Benchmark
 export const runBenchmark = (q = 'java') =>
   request<BenchmarkResult>(`/benchmark?q=${encodeURIComponent(q)}`, { method: 'POST' });
 export const getEvaluation = (mode = 'bm25', k = 5) =>
   request<Record<string, unknown>>(`/evaluation?mode=${mode}&k=${k}`);
 
-// History
 export const getHistory = (limit = 20) => request<HistoryEntry[]>(`/history?limit=${limit}`);
 export const clearHistory = () => request<{ status: string }>('/history', { method: 'DELETE' });
 
-// Health
 export const checkHealth = () => request<{ status: string; version: string }>('/health');

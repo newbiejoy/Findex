@@ -17,11 +17,11 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 public class DocumentExtractor {
-    private static final long MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB safety limit
+    private static final long MAX_FILE_SIZE = 15 * 1024 * 1024;
 
     private static final Set<String> SUPPORTED_TEXT_EXTENSIONS = new HashSet<>(Arrays.asList(
-        "txt", "md", "markdown", "java", "py", "js", "ts", "jsx", "tsx", "html", 
-        "htm", "css", "scss", "json", "xml", "csv", "sql", "properties", "yaml", 
+        "txt", "md", "markdown", "java", "py", "js", "ts", "jsx", "tsx", "html",
+        "htm", "css", "scss", "json", "xml", "csv", "sql", "properties", "yaml",
         "yml", "c", "cpp", "h", "hpp", "rs", "go", "sh", "bat", "cmd", "ps1", "log"
     ));
 
@@ -52,7 +52,7 @@ public class DocumentExtractor {
         try {
             return Files.readString(path, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            // Fallback to ISO_8859_1 if UTF-8 decoding has errors
+
             return Files.readString(path, StandardCharsets.ISO_8859_1);
         }
     }

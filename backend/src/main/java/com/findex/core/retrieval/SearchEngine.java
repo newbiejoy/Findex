@@ -41,7 +41,6 @@ public class SearchEngine {
 
         Scorer scorer = "tfidf".equalsIgnoreCase(rankingMode) ? tfIdfScorer : bm25Scorer;
 
-        // 1. Parse AST query
         QueryParser.Node ast = queryParser.parse(rawQuery);
         Set<Integer> candidateDocIds = queryParser.evaluateCandidates(ast, index);
         Set<String> queryTerms = queryParser.extractPositiveTerms(ast);
@@ -51,7 +50,6 @@ public class SearchEngine {
             return new SearchResponse(rawQuery, scorer.getName(), 0, Math.round(timeTakenMs * 100.0) / 100.0, Collections.emptyList());
         }
 
-        // 2. Filter candidates (fileType, folder)
         List<IndexedDocument> filteredDocs = new ArrayList<>();
         for (int docId : candidateDocIds) {
             IndexedDocument doc = index.getDocument(docId);
@@ -73,7 +71,6 @@ public class SearchEngine {
             filteredDocs.add(doc);
         }
 
-        // 3. Compute relevance scores and explanations
         int totalDocs = Math.max(index.getTotalDocuments(), 1);
         double avgDocLength = index.getAvgDocLength();
         List<SearchResult> rankedResults = new ArrayList<>();
@@ -96,7 +93,6 @@ public class SearchEngine {
                 }
             }
 
-            // Fallback score if boolean query retrieved docs with purely structural match
             if (totalScore <= 0.0) {
                 totalScore = 0.01;
             }
@@ -114,7 +110,6 @@ public class SearchEngine {
             ));
         }
 
-        // 4. Sort descending by score
         Collections.sort(rankedResults);
 
         int totalFound = rankedResults.size();

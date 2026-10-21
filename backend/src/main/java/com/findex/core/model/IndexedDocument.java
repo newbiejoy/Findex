@@ -13,8 +13,8 @@ public class IndexedDocument implements Serializable {
     private final int termCount;
     private final String previewText;
 
-    public IndexedDocument(int id, String folderId, String filePath, String fileName, 
-                           String extension, long fileSize, long lastModified, 
+    public IndexedDocument(int id, String folderId, String filePath, String fileName,
+                           String extension, long fileSize, long lastModified,
                            int termCount, String previewText) {
         this.id = id;
         this.folderId = folderId;

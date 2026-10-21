@@ -12,8 +12,8 @@ public class BenchmarkResult implements Serializable {
     private final int totalDocumentsScanned;
     private final List<SearchResult> topResults;
 
-    public BenchmarkResult(String query, double linearScanMs, double invertedIndexMs, 
-                           double speedupFactor, int matchingDocuments, 
+    public BenchmarkResult(String query, double linearScanMs, double invertedIndexMs,
+                           double speedupFactor, int matchingDocuments,
                            int totalDocumentsScanned, List<SearchResult> topResults) {
         this.query = query;
         this.linearScanMs = linearScanMs;

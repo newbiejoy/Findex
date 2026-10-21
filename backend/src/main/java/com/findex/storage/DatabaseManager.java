@@ -71,7 +71,6 @@ public class DatabaseManager {
         return DriverManager.getConnection(DB_URL);
     }
 
-    // Folders
     public List<FolderConfig> getFolders() {
         List<FolderConfig> list = new ArrayList<>();
         String sql = "SELECT id, path, name, file_count, added_at, last_indexed_at FROM registered_folders ORDER BY added_at DESC";
@@ -156,7 +155,6 @@ public class DatabaseManager {
         }
     }
 
-    // Documents
     public void saveDocument(IndexedDocument doc) {
         String sql = """
             INSERT INTO documents (id, folder_id, file_path, file_name, extension, file_size, last_modified, term_count, preview_text, indexed_at)
@@ -225,7 +223,6 @@ public class DatabaseManager {
         }
     }
 
-    // Search History
     public void recordSearch(String query, String mode, int resultCount, double latencyMs) {
         String sql = "INSERT INTO search_history (query, mode, result_count, latency_ms, searched_at) VALUES (?, ?, ?, ?, ?)";
         try (Connection conn = getConnection();
@@ -274,7 +271,6 @@ public class DatabaseManager {
         }
     }
 
-    // Settings
     public String getSetting(String key, String defaultValue) {
         String sql = "SELECT value FROM settings WHERE key = ?";
         try (Connection conn = getConnection();
