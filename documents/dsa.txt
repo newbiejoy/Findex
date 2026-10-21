@@ -1,0 +1,2 @@
+Data structures organize data efficiently.
+Algorithms solve computational problems.

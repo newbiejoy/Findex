@@ -1,0 +1,2 @@
+Java is an object-oriented programming language.
+Java supports classes and inheritance.
